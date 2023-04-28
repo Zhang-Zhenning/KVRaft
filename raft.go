@@ -24,8 +24,6 @@ func (rf *Raft) ResetElectionTimer() {
 
 // set status of current node
 func (rf *Raft) SetStatus(status int) {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
 
 	if (rf.Status != Follower) && (status == Follower) {
 		rf.ResetElectionTimer()
@@ -44,48 +42,36 @@ func (rf *Raft) SetStatus(status int) {
 
 // get status of current node
 func (rf *Raft) GetStatus() int {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
 
 	return rf.Status
 }
 
 // get current term and leader status
 func (rf *Raft) GetTerm() (int, bool) {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
 
 	return rf.Term, rf.Status == Leader
 }
 
 // set current term
 func (rf *Raft) SetTerm(term int) {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
 
 	rf.Term = term
 }
 
 // get commit index
 func (rf *Raft) GetCommitIndex() int {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
 
 	return rf.CommitIndex
 }
 
 // set commit index
 func (rf *Raft) SetCommitIndex(index int) {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
 
 	rf.CommitIndex = index
 }
 
 // get latest log index and term
 func (rf *Raft) GetLatestLogTermAndIndex() (int, int) {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
 
 	if len(rf.logs) == 0 {
 		return rf.Snapshot.Term, rf.Snapshot.Index
@@ -97,8 +83,6 @@ func (rf *Raft) GetLatestLogTermAndIndex() (int, int) {
 
 // get the term of log at index
 func (rf *Raft) GetLogTerm(index int) (bool, int) {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
 
 	if index-rf.Snapshot.Index-1 < 0 {
 		if index == rf.Snapshot.Index {
@@ -112,8 +96,7 @@ func (rf *Raft) GetLogTerm(index int) (bool, int) {
 
 // memorize the latest append entry request from leader
 func (rf *Raft) RecordRequest(req *AppendEntriesArgs) {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
+
 	rf.LastReqFromLeader = *req
 }
 
@@ -152,8 +135,6 @@ func (rf *Raft) GetNewLogEntries(index int, snapshot *LogSnapshot, logentries *[
 
 // get the log entries we need to send to a given peer, only when the peer is a follower and we are leader
 func (rf *Raft) GetLogEntriesFor(peer int) AppendEntriesArgs {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
 
 	var args AppendEntriesArgs
 	args.Term = rf.Term
@@ -170,16 +151,12 @@ func (rf *Raft) GetLogEntriesFor(peer int) AppendEntriesArgs {
 
 // set follower's next log index
 func (rf *Raft) SetFollowerNextLogIndex(peer int, index int) {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
 
 	rf.FollowerNextLogIndex[peer] = index
 }
 
 // set follower's match index
 func (rf *Raft) SetFollowerMatchIndex(peer int, index int) {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
 
 	rf.FollowerNextLogIndex[peer] = index + 1
 	rf.FollowerMatchIndex[peer] = index
@@ -187,8 +164,6 @@ func (rf *Raft) SetFollowerMatchIndex(peer int, index int) {
 
 // insert a new log entry, only when we are leader
 func (rf *Raft) InsertLogEntry(command interface{}) int {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
 
 	newl := LogEntry{
 		Term:  rf.Term,
@@ -230,8 +205,7 @@ func (rf *Raft) UpdateCommitIndex() bool {
 
 // check whether the args is the old one
 func (rf *Raft) isOldRequest(req *AppendEntriesArgs) bool {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
+
 	if req.Term == rf.LastReqFromLeader.Term && req.LeaderId == rf.LastReqFromLeader.LeaderId {
 		lastIndex := rf.LastReqFromLeader.PrevLogIndex + rf.LastReqFromLeader.Snapshot.Index + len(rf.LastReqFromLeader.Entries)
 		reqLastIndex := req.PrevLogIndex + req.Snapshot.Index + len(req.Entries)
@@ -244,8 +218,7 @@ func (rf *Raft) isOldRequest(req *AppendEntriesArgs) bool {
 // start sync log entries to peers immediately
 // only when we are leader
 func (rf *Raft) SyncLogNow() {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
+
 	for i := 0; i < len(rf.peers); i++ {
 		rf.HeartbeatTimers[i].Reset(0)
 	}
@@ -274,6 +247,9 @@ func (rf *Raft) SendVoteRequest(server int, args *RequestVoteArgs, repl *Request
 // handle the request vote from other peers
 // can be invoked from every peer not only Leader
 func (rf *Raft) HandleRequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
 	reply.VoteGranted = true
 	reply.Term, _ = rf.GetTerm()
 
@@ -332,6 +308,9 @@ func (rf *Raft) SendAppendEntryRequest(server int, args *AppendEntriesArgs, repl
 
 // handle request append entry rpc call
 func (rf *Raft) HandleAppendEntry(args *AppendEntriesArgs, repl *AppendEntriesReply) {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
 	currentTerm, _ := rf.GetTerm()
 	repl.Term = currentTerm
 	repl.Success = true
@@ -386,7 +365,6 @@ func (rf *Raft) HandleAppendEntry(args *AppendEntriesArgs, repl *AppendEntriesRe
 	// update log entries and snapshot
 	rf.RecordRequest(args)
 	if len(args.Entries) > 0 || args.Snapshot.Index > 0 {
-		rf.mu.Lock()
 		start := args.PrevLogIndex
 		if args.Snapshot.Index > 0 {
 			rf.Snapshot = args.Snapshot
@@ -411,7 +389,6 @@ func (rf *Raft) HandleAppendEntry(args *AppendEntriesArgs, repl *AppendEntriesRe
 		}
 
 		rf.logs = rf.logs[:size]
-		rf.mu.Unlock()
 	}
 
 	// update commit index
@@ -423,8 +400,6 @@ func (rf *Raft) HandleAppendEntry(args *AppendEntriesArgs, repl *AppendEntriesRe
 
 // apply all the committed log entries
 func (rf *Raft) Apply() {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
 
 	if rf.Status == Leader {
 		rf.UpdateCommitIndex()
@@ -462,9 +437,14 @@ func (rf *Raft) Apply() {
 
 // request vote, try to be a new leader
 func (rf *Raft) Election() {
+
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
 	rf.SetTerm(rf.Term + 1)
 	logt, logi := rf.GetLatestLogTermAndIndex()
 	electTerm, _ := rf.GetTerm()
+
 	voteArgs := RequestVoteArgs{
 		LeaderId: rf.me,
 		Term:     electTerm,
@@ -521,6 +501,7 @@ func (rf *Raft) Election() {
 // election loop, should never terminate unless the node is dead
 func (rf *Raft) ElectionLoop() {
 	rf.ResetElectionTimer()
+
 	defer rf.ElectionTimer.Stop()
 
 	for !rf.IsKilled {
@@ -552,6 +533,7 @@ func (rf *Raft) SyncLog(server int) (sync_success bool) {
 	continueLoop := true
 	for continueLoop {
 		continueLoop = false
+
 		curTerm, isLeader := rf.GetTerm()
 
 		// only leader can sync logs to peers
@@ -561,10 +543,13 @@ func (rf *Raft) SyncLog(server int) (sync_success bool) {
 
 		arg := rf.GetLogEntriesFor(server)
 		rep := AppendEntriesReply{Term: 0}
+		//rf.mu.Unlock()
 
 		// send rpc call to peer
 		rpcRet := rf.SendAppendEntryRequest(server, &arg, &rep)
-		curTerm, isLeader = rf.GetTerm()
+
+		//rf.mu.Lock()
+		//curTerm, isLeader = rf.GetTerm()
 
 		// if rpc call failed, retry
 		if rpcRet && isLeader {
@@ -583,9 +568,11 @@ func (rf *Raft) SyncLog(server int) (sync_success bool) {
 				} else if arg.Snapshot.Index > 0 {
 					rf.SetFollowerMatchIndex(server, arg.Snapshot.Index)
 				}
+
 			}
 		} else {
 			continueLoop = true
+
 		}
 
 	}
@@ -603,14 +590,15 @@ func (rf *Raft) SyncLogLoop(server int) {
 
 	for !rf.IsKilled {
 		<-rf.HeartbeatTimers[server].C
+
 		if rf.IsKilled {
 			break
 		}
+
 		rf.mu.Lock()
 		rf.HeartbeatTimers[server].Reset(HeartbeatInterval)
-		rf.mu.Unlock()
-
 		_, isLeader := rf.GetTerm()
+
 		if isLeader {
 			sync_success := rf.SyncLog(server)
 			if sync_success {
@@ -618,12 +606,17 @@ func (rf *Raft) SyncLogLoop(server int) {
 				rf.SyncLogNow()
 			}
 		}
+		rf.mu.Unlock()
+
 	}
 
 }
 
 // an interface to other threads to start a new command (a new log)
 func (rf *Raft) ImplementCommand(command interface{}) (index int, term int, isLeader bool) {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
 	index = 0
 	term, isLeader = rf.GetTerm()
 	if !isLeader {
@@ -639,6 +632,9 @@ func (rf *Raft) ImplementCommand(command interface{}) (index int, term int, isLe
 
 // kill the node
 func (rf *Raft) Kill() {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
 	rf.IsKilled = true
 	// shutdown the election loop
 	rf.ElectionTimer.Reset(0)
