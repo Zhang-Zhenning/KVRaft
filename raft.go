@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"math/rand"
 	"sort"
 	"sync"
 	"time"
@@ -26,11 +27,11 @@ func (rf *Raft) SetStatus(status int) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
-	if rf.Status != Follower && status == Follower {
+	if (rf.Status != Follower) && (status == Follower) {
 		rf.ResetElectionTimer()
 	}
 
-	if rf.Status != Leader && status == Leader {
+	if (rf.Status != Leader) && (status == Leader) {
 		index := len(rf.logs)
 		for i := 0; i < len(rf.peers); i++ {
 			rf.FollowerNextLogIndex[i] = index + 1 + rf.Snapshot.Index
@@ -385,6 +386,7 @@ func (rf *Raft) HandleAppendEntry(args *AppendEntriesArgs, repl *AppendEntriesRe
 	// update log entries and snapshot
 	rf.RecordRequest(args)
 	if len(args.Entries) > 0 || args.Snapshot.Index > 0 {
+		rf.mu.Lock()
 		start := args.PrevLogIndex
 		if args.Snapshot.Index > 0 {
 			rf.Snapshot = args.Snapshot
@@ -409,6 +411,7 @@ func (rf *Raft) HandleAppendEntry(args *AppendEntriesArgs, repl *AppendEntriesRe
 		}
 
 		rf.logs = rf.logs[:size]
+		rf.mu.Unlock()
 	}
 
 	// update commit index
@@ -641,4 +644,41 @@ func (rf *Raft) Kill() {
 	rf.ElectionTimer.Reset(0)
 	// shutdown the sync log loop
 	rf.SyncLogNow()
+}
+
+// create a Raft node
+func CreateNode(peers []string, myId int, applyChan chan ApplyMsg) *Raft {
+	rf := new(Raft)
+	rf.peers = peers
+	rf.me = myId
+	rf.Term = 0
+	rf.CommitIndex = 0
+	rf.LastApplied = 0
+	rf.ApplyCh = applyChan
+	rf.ElectionTime = rand.New(rand.NewSource(time.Now().UnixNano() + int64(rf.me)))
+	rf.IsKilled = false
+	rf.HeartbeatTimers = make([]*time.Timer, len(rf.peers))
+	rf.ElectionTimer = time.NewTimer(VoteInterval)
+	rf.FollowerNextLogIndex = make([]int, len(rf.peers))
+	rf.FollowerMatchIndex = make([]int, len(rf.peers))
+	rf.SetStatus(Follower)
+	rf.LastReqFromLeader = AppendEntriesArgs{
+		Term:     -1,
+		LeaderId: -1,
+	}
+	rf.Snapshot = LogSnapshot{
+		Index: 0,
+		Term:  0,
+	}
+
+	// start the log sync loop
+	for i := 0; i < len(rf.peers); i++ {
+		rf.HeartbeatTimers[i] = time.NewTimer(HeartbeatInterval)
+		go rf.SyncLogLoop(i)
+	}
+
+	// start the election loop
+	go rf.ElectionLoop()
+
+	return rf
 }
