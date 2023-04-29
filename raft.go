@@ -615,7 +615,7 @@ func (rf *Raft) Election() {
 		rf.ResetElectionTimer()
 		rf.SendElectionWinning()
 		rf.SyncLogNow()
-		go rf.KillLeaderAfterTime(1 * time.Second)
+		go rf.KillLeaderAfterTime(LeaderMaximumTime)
 		return
 	}
 

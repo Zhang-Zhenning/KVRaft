@@ -21,6 +21,7 @@ const enableDebug bool = false
 const RPCServerPath string = "."
 
 const ElectionWinning int = -1000
+const LeaderMaximumTime = time.Duration((time.Second * 1000))
 
 // apply structure
 type ApplyMsg struct {
