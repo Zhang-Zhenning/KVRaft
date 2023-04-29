@@ -488,7 +488,7 @@ func (rf *Raft) Apply() {
 	if rf.LastApplied > lastapplied {
 		_, p1 := rf.GetLogTerm(lastapplied + 1)
 		_, p2 := rf.GetLogTerm(rf.LastApplied)
-		fmt.Printf("Node %s applied log from index %d (term %d) to index %d (term %d)\n", rf.peers[rf.me], lastapplied+1, p1, rf.LastApplied, p2)
+		fmt.Printf("Node %s pushed logs from index %d (term %d) to index %d (term %d) into implementation channel\n", rf.peers[rf.me], lastapplied+1, p1, rf.LastApplied, p2)
 	}
 }
 
