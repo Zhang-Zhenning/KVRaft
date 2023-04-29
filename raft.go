@@ -229,9 +229,8 @@ func (rf *Raft) SyncLogNow() {
 
 // request vote sent to other peers
 // can be sent from every peer not only Leader
-func (rf *Raft) SendVoteRequest(server int, args *RequestVoteArgs, repl *RequestVoteReply) bool {
+func (rf *Raft) SendVoteRequest(server int, args *RequestVoteArgs, repl *RequestVoteReply) error {
 	finishChan := make(chan bool)
-	var ret bool = false
 
 	// use a new thread to invoke rpc call
 	go func() {
@@ -240,16 +239,52 @@ func (rf *Raft) SendVoteRequest(server int, args *RequestVoteArgs, repl *Request
 	}()
 
 	select {
-	case ret = <-finishChan:
+	case <-finishChan:
 	case <-time.After(HeartbeatInterval):
 	}
 
-	return ret
+	return nil
+}
+
+// send new command to the leader node
+func SendCommandToLeader(server string, command interface{}) error {
+	finishChan := make(chan bool)
+
+	// construct the args
+	args := &CommandArgs{}
+	args.Command = command
+
+	// construct the reply
+	reply := &CommandReply{}
+
+	// use a new thread to invoke rpc call
+	go func() {
+		rpcret := call(server, "Raft.HandleCommand", args, reply)
+		finishChan <- rpcret
+	}()
+
+	select {
+	case <-finishChan:
+	case <-time.After(HeartbeatInterval * 5):
+	}
+
+	return nil
+}
+
+// handle the command request
+func (rf *Raft) HandleCommand(args *CommandArgs, reply *CommandReply) error {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
+	rf.ImplementCommand(args.Command)
+	reply.Success = true
+
+	return nil
 }
 
 // handle the request vote from other peers
 // can be invoked from every peer not only Leader
-func (rf *Raft) HandleRequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
+func (rf *Raft) HandleRequestVote(args *RequestVoteArgs, reply *RequestVoteReply) error {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
@@ -259,7 +294,7 @@ func (rf *Raft) HandleRequestVote(args *RequestVoteArgs, reply *RequestVoteReply
 	// check whether is term of candidate is smaller than current term
 	if reply.Term > args.Term {
 		reply.VoteGranted = false
-		return
+		return nil
 	}
 
 	// if the term of candidate is larger than current term, update current term
@@ -271,7 +306,7 @@ func (rf *Raft) HandleRequestVote(args *RequestVoteArgs, reply *RequestVoteReply
 	// if we have voted, then refuse
 	if rf.VoteCount > 0 && rf.VoteFor != args.LeaderId {
 		reply.VoteGranted = false
-		return
+		return nil
 	}
 
 	// check whether the candidate's log is at least as up-to-date as receiver's log
@@ -286,14 +321,16 @@ func (rf *Raft) HandleRequestVote(args *RequestVoteArgs, reply *RequestVoteReply
 		rf.VoteFor = args.LeaderId
 		rf.VoteCount = 1
 		rf.ResetElectionTimer()
+		fmt.Printf("Node %s vote for %s\n", rf.peers[rf.me], rf.peers[args.LeaderId])
 	}
+
+	return nil
 }
 
 // append entries sent to other peers
 // can only be sent from Leader
-func (rf *Raft) SendAppendEntryRequest(server int, args *AppendEntriesArgs, repl *AppendEntriesReply) bool {
+func (rf *Raft) SendAppendEntryRequest(server int, args *AppendEntriesArgs, repl *AppendEntriesReply) error {
 	finishChan := make(chan bool)
-	var ret bool = false
 
 	// use a new thread to invoke rpc call
 	go func() {
@@ -302,15 +339,15 @@ func (rf *Raft) SendAppendEntryRequest(server int, args *AppendEntriesArgs, repl
 	}()
 
 	select {
-	case ret = <-finishChan:
+	case <-finishChan:
 	case <-time.After(time.Millisecond * 400):
 	}
 
-	return ret
+	return nil
 }
 
 // handle request append entry rpc call
-func (rf *Raft) HandleAppendEntry(args *AppendEntriesArgs, repl *AppendEntriesReply) {
+func (rf *Raft) HandleAppendEntry(args *AppendEntriesArgs, repl *AppendEntriesReply) error {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
@@ -322,14 +359,14 @@ func (rf *Raft) HandleAppendEntry(args *AppendEntriesArgs, repl *AppendEntriesRe
 	// refuse sync the log
 	if args.Term < currentTerm {
 		repl.Success = false
-		return
+		return nil
 	}
 
 	// if the args is the old one
 	// refuse sync the log
 	if rf.isOldRequest(args) {
 		repl.Success = false
-		return
+		return nil
 	}
 
 	// update the term and status
@@ -341,7 +378,7 @@ func (rf *Raft) HandleAppendEntry(args *AppendEntriesArgs, repl *AppendEntriesRe
 	if args.PrevLogIndex == ElectionWinning {
 		rf.VoteCount = 0
 		rf.VoteFor = -1
-		return
+		return nil
 	}
 
 	// get latest log index and term
@@ -354,7 +391,7 @@ func (rf *Raft) HandleAppendEntry(args *AppendEntriesArgs, repl *AppendEntriesRe
 			// the log is not consistent, refuse to sync
 			repl.Success = false
 			repl.LastApplied = rf.LastApplied // tell leader the last applied one so the leader can send the new one
-			return
+			return nil
 		}
 
 		flg, bestterm := rf.GetLogTerm(args.PrevLogIndex)
@@ -362,13 +399,13 @@ func (rf *Raft) HandleAppendEntry(args *AppendEntriesArgs, repl *AppendEntriesRe
 			// the log is not consistent, refuse to sync
 			repl.Success = false
 			repl.LastApplied = rf.LastApplied // tell leader the last applied one so the leader can send the new one
-			return
+			return nil
 		}
 		if flg == false && bestterm < args.PrevLogTerm {
 			// the log is not consistent, refuse to sync
 			repl.Success = false
 			repl.LastApplied = rf.LastApplied // tell leader the last applied one so the leader can send the new one
-			return
+			return nil
 		}
 
 	}
@@ -406,7 +443,7 @@ func (rf *Raft) HandleAppendEntry(args *AppendEntriesArgs, repl *AppendEntriesRe
 	rf.SetCommitIndex(args.LeaderCommit)
 	rf.Apply()
 
-	return
+	return nil
 }
 
 // apply all the committed log entries
@@ -415,6 +452,8 @@ func (rf *Raft) Apply() {
 	if rf.Status == Leader {
 		rf.UpdateCommitIndex()
 	}
+
+	lastapplied := rf.LastApplied
 
 	// apply the snapshot
 	if rf.Snapshot.Index > rf.LastApplied {
@@ -444,6 +483,13 @@ func (rf *Raft) Apply() {
 		rf.ApplyCh <- msg
 	}
 
+	// if in this round we have applied some log entries
+	// if in this round we have applied some logs
+	if rf.LastApplied > lastapplied {
+		_, p1 := rf.GetLogTerm(lastapplied + 1)
+		_, p2 := rf.GetLogTerm(rf.LastApplied)
+		fmt.Printf("Node %s applied log from index %d (term %d) to index %d (term %d)\n", rf.peers[rf.me], lastapplied+1, p1, rf.LastApplied, p2)
+	}
 }
 
 // send election winning message to other peers
@@ -503,7 +549,7 @@ func (rf *Raft) Election() {
 				return
 			}
 			rst := rf.SendVoteRequest(server, &voteArgs, &resp)
-			if !rst {
+			if rst != nil {
 				return
 			}
 			if resp.VoteGranted == true {
@@ -525,6 +571,7 @@ func (rf *Raft) Election() {
 		rf.ResetElectionTimer()
 		return
 	} else if numGranted*2 > len(rf.peers) {
+		fmt.Printf("Node %s win the election\n", rf.peers[rf.me])
 		rf.SetStatus(Leader)
 		rf.ResetElectionTimer()
 		rf.SendElectionWinning()
@@ -587,7 +634,7 @@ func (rf *Raft) SyncLog(server int) (sync_success bool) {
 		//curTerm, isLeader = rf.GetTerm()
 
 		// if rpc call failed, retry
-		if rpcRet && isLeader {
+		if (rpcRet == nil) && isLeader {
 			// if the peer has larger term, convert to follower
 			if rep.Term > curTerm {
 				rf.SetTerm(rep.Term)
@@ -649,8 +696,6 @@ func (rf *Raft) SyncLogLoop(server int) {
 
 // an interface to other threads to start a new command (a new log)
 func (rf *Raft) ImplementCommand(command interface{}) (index int, term int, isLeader bool) {
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
 
 	index = 0
 	term, isLeader = rf.GetTerm()

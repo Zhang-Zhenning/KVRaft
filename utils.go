@@ -75,6 +75,14 @@ type AppendEntriesReply struct {
 	LastApplied int
 }
 
+type CommandArgs struct {
+	Command interface{}
+}
+
+type CommandReply struct {
+	Success bool
+}
+
 // RAFT structure
 type Raft struct {
 	mu              sync.Mutex
