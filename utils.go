@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"math/rand"
 	"net"
 	"sync"
@@ -21,7 +22,7 @@ const enableDebug bool = false
 const RPCServerPath string = "."
 
 const ElectionWinning int = -1000
-const LeaderMaximumTime = time.Duration((time.Second * 1000))
+const LeaderMaximumTime = time.Duration((time.Second * 20))
 
 // apply structure
 type ApplyMsg struct {
@@ -118,4 +119,45 @@ type Raft struct {
 
 	// last appendrequest from leader
 	LastReqFromLeader AppendEntriesArgs
+}
+
+// apply msg from the msg channels
+func handleMsg(chans []chan ApplyMsg, raftnodes []string) {
+
+	for i := 0; i < len(chans); i++ {
+		go func(i int) {
+			for {
+				msg := <-chans[i]
+				fmt.Printf("Node %s: implemented command %s\n", raftnodes[i], msg.Command)
+			}
+		}(i)
+
+	}
+
+}
+
+// create command and send to the raft node
+func sendCommands(raftnodes []string, cmds []string) {
+
+	for i := 0; i < len(cmds); i++ {
+		time.Sleep(1 * time.Second)
+		ret := false
+
+		for ret == false {
+			for j := 0; j < len(raftnodes); j++ {
+				retj := SendCommandToLeader(raftnodes[j], cmds[i])
+				if retj == true {
+					ret = true
+					break
+				}
+			}
+		}
+	}
+}
+
+// kill all nodes
+func killAllNodes(rafts []string) {
+	for i := 0; i < len(rafts); i++ {
+		SendKillRequest(rafts[i])
+	}
 }

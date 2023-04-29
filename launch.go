@@ -6,40 +6,6 @@ import (
 	"time"
 )
 
-// apply msg from the msg channels
-func handleMsg(chans []chan ApplyMsg, raftnodes []string) {
-
-	for i := 0; i < len(chans); i++ {
-		go func(i int) {
-			for {
-				msg := <-chans[i]
-				fmt.Printf("Node %s: implemented command %s\n", raftnodes[i], msg.Command)
-			}
-		}(i)
-
-	}
-
-}
-
-// create command and send to the raft node
-func sendCommands(raftnodes []string, cmds []string) {
-
-	for i := 0; i < len(cmds); i++ {
-		time.Sleep(2 * time.Second)
-		ret := false
-
-		for ret == false {
-			for j := 0; j < len(raftnodes); j++ {
-				retj := SendCommandToLeader(raftnodes[j], cmds[i])
-				if retj == true {
-					ret = true
-					break
-				}
-			}
-		}
-	}
-}
-
 func main() {
 
 	// setup/cleanup the socket files
@@ -89,10 +55,12 @@ func main() {
 
 	time.Sleep(1 * time.Second)
 
-	go sendCommands(nodes, commands)
+	// send all commands, and wait for Raft fleet finishing all tasks
+	sendCommands(nodes, commands)
 
-	for {
-		time.Sleep(1 * time.Second)
-	}
+	time.Sleep(2 * time.Second)
+
+	//// shutdown all nodes
+	//killAllNodes(nodes)
 
 }

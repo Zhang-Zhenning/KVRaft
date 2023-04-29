@@ -761,7 +761,7 @@ func (rf *Raft) ImplementCommand(command interface{}, donec chan bool) (index in
 }
 
 // kill the node
-func (rf *Raft) Kill() {
+func (rf *Raft) Kill(_ *struct{}, _ *struct{}) error {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
@@ -771,7 +771,29 @@ func (rf *Raft) Kill() {
 	// shutdown the sync log loop
 	rf.SyncLogNow()
 	// shutdown the server
+	time.Sleep(2 * time.Second)
 	rf.shutdown_chan <- true
+	rf.listener.Close()
+
+	return nil
+}
+
+// customer sends shutdown signal to the node
+func SendKillRequest(server string) error {
+	finishChan := make(chan bool)
+
+	// use a new thread to invoke rpc call
+	go func() {
+		rpcret := call(server, "Raft.Kill", new(struct{}), new(struct{}))
+		finishChan <- rpcret
+	}()
+
+	select {
+	case <-finishChan:
+	case <-time.After(time.Millisecond * 400):
+	}
+
+	return nil
 }
 
 // deploy the rf node
@@ -787,7 +809,7 @@ func (rf *Raft) Deploy() {
 // create a Raft node
 func CreateNode(peers []string, nam string, myId int, applyChan chan ApplyMsg) *Raft {
 	rf := new(Raft)
-	rf.shutdown_chan = make(chan bool, 1)
+	rf.shutdown_chan = make(chan bool, 5)
 	rf.peers = peers
 	rf.me = myId
 	rf.me_name = nam
@@ -858,7 +880,7 @@ func (rf *Raft) StartServer(serverWg *sync.WaitGroup) {
 
 		conc, er := rf.listener.Accept()
 		if er != nil {
-			fmt.Printf("Node %s: Error in accepting: %s\n", rf.me_name, er)
+			//fmt.Printf("Node %s: Error in accepting: %s\n", rf.me_name, er)
 			break
 		} else {
 			go func() {
