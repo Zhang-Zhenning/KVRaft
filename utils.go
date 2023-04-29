@@ -80,7 +80,8 @@ type CommandArgs struct {
 }
 
 type CommandReply struct {
-	Success bool
+	Success  bool
+	IsLeader bool
 }
 
 // RAFT structure
@@ -110,6 +111,9 @@ type Raft struct {
 
 	listener      net.Listener
 	shutdown_chan chan bool
+
+	CustomerCommandIndex int
+	CustomerCommandDone  chan bool
 
 	// last appendrequest from leader
 	LastReqFromLeader AppendEntriesArgs

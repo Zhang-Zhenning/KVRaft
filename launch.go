@@ -25,9 +25,17 @@ func handleMsg(chans []chan ApplyMsg, raftnodes []string) {
 func sendCommands(raftnodes []string, cmds []string) {
 
 	for i := 0; i < len(cmds); i++ {
-		time.Sleep(4 * time.Second)
-		for j := 0; j < len(raftnodes); j++ {
-			SendCommandToLeader(raftnodes[j], cmds[i])
+		time.Sleep(2 * time.Second)
+		ret := false
+
+		for ret == false {
+			for j := 0; j < len(raftnodes); j++ {
+				retj := SendCommandToLeader(raftnodes[j], cmds[i])
+				if retj == true {
+					ret = true
+					break
+				}
+			}
 		}
 	}
 }
@@ -39,10 +47,13 @@ func main() {
 	defer CleanupUnixSocketFolder(s)
 
 	// get all commands
-	commands := []string{"a = 1", "a = 2", "a = 3", "a = 4", "a = 5", "a = 6", "a = 7", "a = 8", "a = 9", "a = 10"}
+	commands := []string{}
+	for i := 0; i < 50; i++ {
+		commands = append(commands, fmt.Sprintf("a = %d", i))
+	}
 
 	// get all nodes names
-	nodes := []string{get_socket_name("node1"), get_socket_name("node2"), get_socket_name("node3"), get_socket_name("node4"), get_socket_name("node5")}
+	nodes := []string{get_socket_name("node1"), get_socket_name("node2"), get_socket_name("node3"), get_socket_name("node4"), get_socket_name("node5"), get_socket_name("node6"), get_socket_name("node7"), get_socket_name("node8"), get_socket_name("node9"), get_socket_name("node10")}
 	applyChans := []chan ApplyMsg{}
 	// create all applychannels
 	for i := 0; i < len(nodes); i++ {

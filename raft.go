@@ -247,7 +247,7 @@ func (rf *Raft) SendVoteRequest(server int, args *RequestVoteArgs, repl *Request
 }
 
 // send new command to the leader node
-func SendCommandToLeader(server string, command interface{}) error {
+func SendCommandToLeader(server string, command interface{}) bool {
 	finishChan := make(chan bool)
 
 	// construct the args
@@ -255,7 +255,7 @@ func SendCommandToLeader(server string, command interface{}) error {
 	args.Command = command
 
 	// construct the reply
-	reply := &CommandReply{}
+	reply := &CommandReply{IsLeader: false, Success: false}
 
 	// use a new thread to invoke rpc call
 	go func() {
@@ -265,19 +265,48 @@ func SendCommandToLeader(server string, command interface{}) error {
 
 	select {
 	case <-finishChan:
-	case <-time.After(HeartbeatInterval * 5):
+		if (reply.IsLeader == true) && (reply.Success == true) {
+			//fmt.Printf("SendCommandToLeader success\n")
+			return true
+		} else {
+			//fmt.Printf("SendCommandToLeader failed\n")
+			return false
+		}
+	case <-time.After(HeartbeatInterval * 7):
+		fmt.Printf("SendCommandToLeader timeout\n")
+		return false
 	}
 
-	return nil
 }
 
 // handle the command request
+// if return then rf is the leader and the command is applied
+// else never return!
 func (rf *Raft) HandleCommand(args *CommandArgs, reply *CommandReply) error {
 	rf.mu.Lock()
-	defer rf.mu.Unlock()
+	_, isl := rf.GetTerm()
+	reply.IsLeader = isl
 
-	rf.ImplementCommand(args.Command)
-	reply.Success = true
+	if isl == false {
+		// not leader, return
+		reply.Success = false
+		rf.mu.Unlock()
+		return nil
+	}
+
+	cdChan := make(chan bool)
+	rf.ImplementCommand(args.Command, cdChan)
+	rf.mu.Unlock()
+
+	// wait for the command to be committed if it is leader
+	select {
+	case <-cdChan:
+		//fmt.Printf("HandleCommand success\n")
+		reply.Success = true
+	case <-time.After(HeartbeatInterval * 5):
+		fmt.Printf("HandleCommand timeout\n")
+		reply.Success = false
+	}
 
 	return nil
 }
@@ -321,7 +350,7 @@ func (rf *Raft) HandleRequestVote(args *RequestVoteArgs, reply *RequestVoteReply
 		rf.VoteFor = args.LeaderId
 		rf.VoteCount = 1
 		rf.ResetElectionTimer()
-		fmt.Printf("Node %s vote for %s\n", rf.peers[rf.me], rf.peers[args.LeaderId])
+		//fmt.Printf("Node %s vote for %s\n", rf.peers[rf.me], rf.peers[args.LeaderId])
 	}
 
 	return nil
@@ -484,10 +513,20 @@ func (rf *Raft) Apply() {
 	}
 
 	// if in this round we have applied some log entries
-	// if in this round we have applied some logs
 	if rf.LastApplied > lastapplied {
 		_, p1 := rf.GetLogTerm(lastapplied + 1)
 		_, p2 := rf.GetLogTerm(rf.LastApplied)
+
+		if rf.Status == Leader {
+			// anounce the customer the command is done, can send the next one
+			if (rf.CustomerCommandIndex > lastapplied) && (rf.CustomerCommandIndex <= rf.LastApplied) && (rf.CustomerCommandDone != nil) {
+				// notify customer the command is done, so the customer can send the next command
+				rf.CustomerCommandDone <- true
+				// reset the customer command index and channel
+				rf.CustomerCommandIndex = -1
+			}
+		}
+
 		fmt.Printf("Node %s pushed logs from index %d (term %d) to index %d (term %d) into implementation channel\n", rf.peers[rf.me], lastapplied+1, p1, rf.LastApplied, p2)
 	}
 }
@@ -571,11 +610,12 @@ func (rf *Raft) Election() {
 		rf.ResetElectionTimer()
 		return
 	} else if numGranted*2 > len(rf.peers) {
-		fmt.Printf("Node %s win the election\n", rf.peers[rf.me])
+		fmt.Printf("Node %s win the election in term %d\n", rf.peers[rf.me], rf.Term)
 		rf.SetStatus(Leader)
 		rf.ResetElectionTimer()
 		rf.SendElectionWinning()
 		rf.SyncLogNow()
+		go rf.KillLeaderAfterTime(1 * time.Second)
 		return
 	}
 
@@ -602,6 +642,14 @@ func (rf *Raft) ElectionLoop() {
 			rf.Election()
 		}
 	}
+}
+
+// kill the leader after certain time, for testing purpose
+func (rf *Raft) KillLeaderAfterTime(d time.Duration) {
+	time.Sleep(d)
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	rf.SetStatus(Follower)
 }
 
 // send request append entries to peer, forcing sync between peer and leader
@@ -695,7 +743,7 @@ func (rf *Raft) SyncLogLoop(server int) {
 }
 
 // an interface to other threads to start a new command (a new log)
-func (rf *Raft) ImplementCommand(command interface{}) (index int, term int, isLeader bool) {
+func (rf *Raft) ImplementCommand(command interface{}, donec chan bool) (index int, term int, isLeader bool) {
 
 	index = 0
 	term, isLeader = rf.GetTerm()
@@ -705,6 +753,8 @@ func (rf *Raft) ImplementCommand(command interface{}) (index int, term int, isLe
 
 	if isLeader {
 		index = rf.InsertLogEntry(command)
+		rf.CustomerCommandDone = donec
+		rf.CustomerCommandIndex = index
 		rf.SyncLogNow()
 	}
 	return
@@ -737,7 +787,7 @@ func (rf *Raft) Deploy() {
 // create a Raft node
 func CreateNode(peers []string, nam string, myId int, applyChan chan ApplyMsg) *Raft {
 	rf := new(Raft)
-	rf.shutdown_chan = make(chan bool)
+	rf.shutdown_chan = make(chan bool, 1)
 	rf.peers = peers
 	rf.me = myId
 	rf.me_name = nam
@@ -746,6 +796,8 @@ func CreateNode(peers []string, nam string, myId int, applyChan chan ApplyMsg) *
 	rf.LastApplied = 0
 	rf.ApplyCh = applyChan
 	rf.ElectionTime = rand.New(rand.NewSource(time.Now().UnixNano() + int64(rf.me)))
+	rf.CommitIndex = -1
+	rf.CustomerCommandDone = nil
 	rf.IsKilled = false
 	rf.HeartbeatTimers = make([]*time.Timer, len(rf.peers))
 	rf.ElectionTimer = time.NewTimer(VoteInterval)
