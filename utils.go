@@ -2,6 +2,7 @@ package main
 
 import (
 	"math/rand"
+	"net"
 	"sync"
 	"time"
 )
@@ -18,6 +19,8 @@ const VoteInterval = HeartbeatInterval * 2
 const enableDebug bool = false
 
 const RPCServerPath string = "."
+
+const ElectionWinning int = -1000
 
 // apply structure
 type ApplyMsg struct {
@@ -77,6 +80,7 @@ type Raft struct {
 	mu              sync.Mutex
 	peers           []string
 	me              int
+	me_name         string
 	logs            []LogEntry
 	Snapshot        LogSnapshot
 	CommitIndex     int
@@ -95,6 +99,9 @@ type Raft struct {
 
 	ApplyCh  chan ApplyMsg
 	IsKilled bool
+
+	listener      net.Listener
+	shutdown_chan chan bool
 
 	// last appendrequest from leader
 	LastReqFromLeader AppendEntriesArgs

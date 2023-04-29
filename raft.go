@@ -1,8 +1,11 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"math/rand"
+	"net"
+	"net/rpc"
 	"sort"
 	"sync"
 	"time"
@@ -334,10 +337,18 @@ func (rf *Raft) HandleAppendEntry(args *AppendEntriesArgs, repl *AppendEntriesRe
 	rf.SetStatus(Follower)
 	rf.ResetElectionTimer()
 
+	// handle the election success entry
+	if args.PrevLogIndex == ElectionWinning {
+		rf.VoteCount = 0
+		rf.VoteFor = -1
+		return
+	}
+
 	// get latest log index and term
 	_, latestLogIndex := rf.GetLatestLogTermAndIndex()
 
 	// check whether the log is consistent
+	// whether the incoming prevlogindex is smaller than the latest log index
 	if args.PrevLogIndex > 0 {
 		if args.PrevLogIndex > latestLogIndex {
 			// the log is not consistent, refuse to sync
@@ -435,6 +446,30 @@ func (rf *Raft) Apply() {
 
 }
 
+// send election winning message to other peers
+func (rf *Raft) SendElectionWinning() {
+
+	args := AppendEntriesArgs{
+		Term:         rf.Term,
+		LeaderId:     rf.me,
+		PrevLogIndex: ElectionWinning,
+		PrevLogTerm:  0,
+		Entries:      nil,
+		LeaderCommit: rf.CommitIndex,
+	}
+
+	for i := 0; i < len(rf.peers); i++ {
+		if i == rf.me {
+			continue
+		} else {
+			go func(server int) {
+				repl := AppendEntriesReply{Term: 0}
+				rf.SendAppendEntryRequest(server, &args, &repl)
+			}(i)
+		}
+	}
+}
+
 // request vote, try to be a new leader
 func (rf *Raft) Election() {
 
@@ -492,6 +527,7 @@ func (rf *Raft) Election() {
 	} else if numGranted*2 > len(rf.peers) {
 		rf.SetStatus(Leader)
 		rf.ResetElectionTimer()
+		rf.SendElectionWinning()
 		rf.SyncLogNow()
 		return
 	}
@@ -501,7 +537,6 @@ func (rf *Raft) Election() {
 // election loop, should never terminate unless the node is dead
 func (rf *Raft) ElectionLoop() {
 	rf.ResetElectionTimer()
-
 	defer rf.ElectionTimer.Stop()
 
 	for !rf.IsKilled {
@@ -640,13 +675,27 @@ func (rf *Raft) Kill() {
 	rf.ElectionTimer.Reset(0)
 	// shutdown the sync log loop
 	rf.SyncLogNow()
+	// shutdown the server
+	rf.shutdown_chan <- true
+}
+
+// deploy the rf node
+func (rf *Raft) Deploy() {
+	go rf.ElectionLoop()
+	for i := range rf.peers {
+		if i != rf.me {
+			go rf.SyncLogLoop(i)
+		}
+	}
 }
 
 // create a Raft node
-func CreateNode(peers []string, myId int, applyChan chan ApplyMsg) *Raft {
+func CreateNode(peers []string, nam string, myId int, applyChan chan ApplyMsg) *Raft {
 	rf := new(Raft)
+	rf.shutdown_chan = make(chan bool)
 	rf.peers = peers
 	rf.me = myId
+	rf.me_name = nam
 	rf.Term = 0
 	rf.CommitIndex = 0
 	rf.LastApplied = 0
@@ -670,11 +719,58 @@ func CreateNode(peers []string, myId int, applyChan chan ApplyMsg) *Raft {
 	// start the log sync loop
 	for i := 0; i < len(rf.peers); i++ {
 		rf.HeartbeatTimers[i] = time.NewTimer(HeartbeatInterval)
-		go rf.SyncLogLoop(i)
 	}
 
 	// start the election loop
-	go rf.ElectionLoop()
 
 	return rf
+}
+
+// start server
+func (rf *Raft) StartServer(serverWg *sync.WaitGroup) {
+
+	// register rpc
+	rpcs := rpc.NewServer()
+	err := rpcs.Register(rf)
+	//os.Remove(rf.me_name)
+	if err != nil {
+		fmt.Printf("Node %s: Error in registering rpc: %s\n", rf.me_name, err)
+		return
+	}
+
+	// listen to incoming rpc calls
+	lis, er := net.Listen("unix", rf.me_name)
+	if er != nil {
+		fmt.Printf("Node %s: Error in listening: %s\n", rf.me_name, er)
+		return
+	}
+
+	rf.listener = lis
+	fmt.Printf("Node %s: start server\n", rf.me_name)
+
+	// announce the server is ready
+	serverWg.Done()
+
+	// start the loop
+	for {
+		select {
+		case <-rf.shutdown_chan:
+			break
+		default:
+		}
+
+		conc, er := rf.listener.Accept()
+		if er != nil {
+			fmt.Printf("Node %s: Error in accepting: %s\n", rf.me_name, er)
+			break
+		} else {
+			go func() {
+				rpcs.ServeConn(conc)
+				conc.Close()
+			}()
+		}
+
+	}
+	fmt.Printf("Node %s: shutdown server\n", rf.me_name)
+
 }
