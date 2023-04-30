@@ -14,7 +14,7 @@ func main() {
 
 	// get all commands
 	commands := []string{}
-	for i := 0; i < 50; i++ {
+	for i := 0; i < 500; i++ {
 		commands = append(commands, fmt.Sprintf("a = %d", i))
 	}
 
@@ -56,7 +56,7 @@ func main() {
 	time.Sleep(1 * time.Second)
 
 	// send all commands, and wait for Raft fleet finishing all tasks
-	sendCommands(nodes, commands)
+	writeCommands(nodes, commands)
 
 	time.Sleep(2 * time.Second)
 

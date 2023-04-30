@@ -25,7 +25,7 @@ const enableDebug bool = false
 const RPCServerPath string = "."
 
 const ElectionWinning int = -1000
-const LeaderMaximumTime = time.Duration((time.Second * 20000))
+const LeaderMaximumTime = time.Duration(HeartbeatInterval * 10)
 
 // apply structure
 type ApplyMsg struct {
@@ -155,6 +155,14 @@ func sendCommands(raftnodes []string, cmds []string) {
 				}
 			}
 		}
+	}
+}
+
+// write a series of commands into Raft fleet
+func writeCommands(raftnodes []string, cmds []string) {
+	for i := 0; i < len(cmds); i++ {
+		time.Sleep(50 * time.Millisecond)
+		Write(raftnodes, cmds[i])
 	}
 }
 

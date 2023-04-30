@@ -270,14 +270,14 @@ func SendCommandToLeader(server string, command interface{}) bool {
 	select {
 	case <-finishChan:
 		if (reply.IsLeader == true) && (reply.Success == true) {
-			//fmt.Printf("SendCommandToLeader success\n")
+			// send to a leader and get success response
 			return true
 		} else {
-			//fmt.Printf("SendCommandToLeader failed\n")
+			// not send to a leader or leader fails to accept, return false and resend the command
 			return false
 		}
 	case <-time.After(HeartbeatInterval * 7):
-		fmt.Printf("SendCommandToLeader timeout\n")
+		fmt.Printf("In SendCommandToLeader: send command %s to Node %s timeout\n", command, server)
 		return false
 	}
 
@@ -305,10 +305,10 @@ func (rf *Raft) HandleCommand(args *CommandArgs, reply *CommandReply) error {
 	// wait for the command to be committed if it is leader
 	select {
 	case <-cdChan:
-		//fmt.Printf("HandleCommand success\n")
+		// leader successfully applied the command
 		reply.Success = true
 	case <-time.After(HeartbeatInterval * 5):
-		fmt.Printf("HandleCommand timeout\n")
+		fmt.Printf("In HandleCommand: Node %s timeout when handle command %s\n", rf.me_name, args.Command)
 		reply.Success = false
 	}
 
@@ -898,5 +898,20 @@ func (rf *Raft) StartServer(serverWg *sync.WaitGroup) {
 
 	}
 	fmt.Printf("Node %s: shutdown server\n", rf.me_name)
+
+}
+
+// an interface for write operation to Raft layer
+func Write(raftnodes []string, cmd string) {
+	ret := false
+	for ret == false {
+		for j := 0; j < len(raftnodes); j++ {
+			retj := SendCommandToLeader(raftnodes[j], cmd)
+			if retj == true {
+				ret = true
+				break
+			}
+		}
+	}
 
 }
