@@ -207,6 +207,10 @@ func (rf *Raft) UpdateCommitIndex() bool {
 }
 
 // check whether the args is the old one
+// it is important to mark the heartbeat appendentry request (empty log entries but the latest term) as old
+// which means if the current request's max index (previndex + snapshot.index + len(entries))
+// is equal to the last request, we need to accept it
+// then the vote counter will be reset (avoid the followers starting a new election)
 func (rf *Raft) isOldRequest(req *AppendEntriesArgs) bool {
 
 	if req.Term == rf.LastReqFromLeader.Term && req.LeaderId == rf.LastReqFromLeader.LeaderId {
@@ -654,6 +658,9 @@ func (rf *Raft) KillLeaderAfterTime(d time.Duration) {
 
 // send request append entries to peer, forcing sync between peer and leader
 // return when the sync is successful or the node is no longer leader
+// it works also as a heartbeat checker to remind follower that the leader is alive
+// after update log to follower, leader will constantly (after each heartbeat time) send
+// an appendentry request with no log entries but with the leader term to follower
 func (rf *Raft) SyncLog(server int) (sync_success bool) {
 	sync_success = false
 	if server == rf.me {

@@ -15,6 +15,9 @@ const Candidate int = 3
 
 // heartbeat interval
 const HeartbeatInterval = time.Duration(time.Millisecond * 600)
+
+// notice the voteinterval must be larger than heartbeatinterval, otherwise
+// there would be endless of elections, increasing the overhead
 const VoteInterval = HeartbeatInterval * 2
 
 const enableDebug bool = false
@@ -22,7 +25,7 @@ const enableDebug bool = false
 const RPCServerPath string = "."
 
 const ElectionWinning int = -1000
-const LeaderMaximumTime = time.Duration((time.Second * 20))
+const LeaderMaximumTime = time.Duration((time.Second * 20000))
 
 // apply structure
 type ApplyMsg struct {
@@ -140,7 +143,7 @@ func handleMsg(chans []chan ApplyMsg, raftnodes []string) {
 func sendCommands(raftnodes []string, cmds []string) {
 
 	for i := 0; i < len(cmds); i++ {
-		time.Sleep(1 * time.Second)
+		time.Sleep(50 * time.Millisecond)
 		ret := false
 
 		for ret == false {
