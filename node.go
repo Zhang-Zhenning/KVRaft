@@ -207,7 +207,7 @@ func (rf *Raft) UpdateCommitIndex() bool {
 }
 
 // check whether the args is the old one
-// it is important to mark the heartbeat appendentry request (empty log entries but the latest term) as old
+// it is important to not mark the heartbeat appendentry request (empty log entries but the latest term) as old
 // which means if the current request's max index (previndex + snapshot.index + len(entries))
 // is equal to the last request, we need to accept it
 // then the vote counter will be reset (avoid the followers starting a new election)
