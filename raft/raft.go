@@ -28,12 +28,36 @@ const ElectionWinning int = -1000
 
 const LeaderMaximumTime = time.Duration(HeartbeatInterval * 10)
 
+// ---------------------------------------KVnode---------------------------------------------
 // operation struct for key-value system
 // will be served as command field in log struct
 type Operation struct {
 	Req interface{}
-	Ch  chan interface{} // finish channel, will only be valid for leader (in other nodes it will be nil as channel can't be transfered by rpc)
+	Ch  int64 // finish channel, will only be valid for leader (in other nodes it will be nil as channel can't be transfered by rpc)
 }
+
+type PutAppendArgs struct {
+	Key   string
+	Value string
+	Op    string // "Put" or "Append"
+	Me    int64
+	MsgId int64
+}
+
+type PutAppendReply struct {
+	Success bool
+}
+
+type GetArgs struct {
+	Key string
+}
+
+type GetReply struct {
+	Success bool
+	Value   string
+}
+
+// ---------------------------------------RAFT---------------------------------------------
 
 // apply structure
 type ApplyMsg struct {
@@ -207,7 +231,7 @@ func StartRaft(raftnodes []*Raft, nodenames []string, applycs []chan ApplyMsg) {
 	wg_server.Wait()
 
 	// handle all msg
-	HandleMsg(applycs, nodenames)
+	//HandleMsg(applycs, nodenames)
 
 	// wait for handle msg goroutines to start
 	time.Sleep(100 * time.Millisecond)

@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"math/big"
+	"raft"
 	"sync/atomic"
 	"time"
 )
@@ -12,6 +13,13 @@ type KVClient struct {
 	servers []*KVNode
 	me      int64
 	msgId   int64
+}
+
+func GenerateOpId() int64 {
+	max := big.NewInt(int64(1) << 62)
+	bigx, _ := rand.Int(rand.Reader, max)
+	x := bigx.Int64()
+	return x
 }
 
 func GenerateClerkId() int64 {
@@ -32,28 +40,28 @@ func CreateClient(servers []*KVNode) *KVClient {
 // client get interface
 // if timeout, return "nil"
 func (ck *KVClient) ClientGet(key string) string {
-	req := GetArgs{
+	req := raft.GetArgs{
 		Key: key,
 	}
 
 	for i := 0; i < 8000; i++ {
-		resp := GetReply{}
+		resp := raft.GetReply{}
 		ck.servers[i%len(ck.servers)].Get(&req, &resp)
 		if resp.Success {
-			fmt.Printf("Client %d: ClientGet %s--%s\n", ck.me, key, resp.Value)
+			fmt.Printf("Client %d: Get %s--%s\n", ck.me, key, resp.Value)
 			return resp.Value
 		}
 		time.Sleep(time.Millisecond * 5)
 	}
 
-	fmt.Printf("Client %d: ClientGet %s timeout\n", ck.me, key)
+	fmt.Printf("Client %d: Get %s timeout\n", ck.me, key)
 	return "nil"
 
 }
 
 // client put/append interface
 func (ck *KVClient) ClientPutAppend(key string, value string, op string) {
-	req := PutAppendArgs{
+	req := raft.PutAppendArgs{
 		Key:   key,
 		Value: value,
 		Op:    op,
@@ -62,7 +70,7 @@ func (ck *KVClient) ClientPutAppend(key string, value string, op string) {
 	}
 
 	for i := 0; i < 8000; i++ {
-		resp := PutAppendReply{}
+		resp := raft.PutAppendReply{}
 		ck.servers[i%len(ck.servers)].PutAppend(&req, &resp)
 		if resp.Success {
 			fmt.Printf("Client %d: %s %s--%s\n", ck.me, op, key, value)

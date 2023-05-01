@@ -18,29 +18,7 @@ type KVNode struct {
 	OperationRecord map[int64]int64
 	KillChan        chan bool
 	AppliedLogIndex int
-}
-
-type PutAppendArgs struct {
-	Key   string
-	Value string
-	Op    string // "Put" or "Append"
-	Me    int64
-	MsgId int64
-}
-
-type PutAppendReply struct {
-	Success bool
-	Err     Err
-}
-
-type GetArgs struct {
-	Key string
-}
-
-type GetReply struct {
-	Success bool
-	Err     Err
-	Value   string
+	OpIDChanDict    *map[int64]chan interface{}
 }
 
 func ShutdownKV(kvs []*KVNode) {

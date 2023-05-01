@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"raft"
 	"time"
 )
@@ -30,10 +29,13 @@ func main() {
 
 	time.Sleep(1 * time.Second)
 
+	// create operation id-channel map
+	opChansDict := make(map[int64]chan interface{})
+
 	// start KV fleet
 	KVservers := []*KVNode{}
 	for i := 0; i < len(nodes); i++ {
-		KVservers = append(KVservers, CreateKVNode(rafts[i], nodes[i], i, applyChans[i]))
+		KVservers = append(KVservers, CreateKVNode(rafts[i], nodes[i], i, applyChans[i], &opChansDict))
 	}
 
 	time.Sleep(1 * time.Second)
@@ -54,13 +56,19 @@ func main() {
 	time.Sleep(1 * time.Second)
 
 	// client2 get some data from the KV fleet
-	fmt.Println("a:", client2.ClientGet("a"))
-	fmt.Println("b:", client2.ClientGet("b"))
-	fmt.Println("c:", client2.ClientGet("c"))
-	fmt.Println("d:", client2.ClientGet("d"))
-	fmt.Println("e:", client2.ClientGet("e"))
-	fmt.Println("f:", client2.ClientGet("f"))
-	fmt.Println("g:", client2.ClientGet("g"))
+	client2.ClientGet("a")
+	time.Sleep(1 * time.Second)
+	client2.ClientGet("b")
+	time.Sleep(1 * time.Second)
+	client2.ClientGet("c")
+	time.Sleep(1 * time.Second)
+	client2.ClientGet("d")
+	time.Sleep(1 * time.Second)
+	client2.ClientGet("e")
+	time.Sleep(1 * time.Second)
+	client2.ClientGet("f")
+	time.Sleep(1 * time.Second)
+	client2.ClientGet("g")
 
 	// shutdown raft fleet
 	raft.ShutdownRaft(rafts)

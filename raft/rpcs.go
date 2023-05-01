@@ -1,6 +1,7 @@
 package raft
 
 import (
+	"encoding/gob"
 	"log"
 	"net/rpc"
 	"os"
@@ -13,6 +14,14 @@ func SetupUnixSocketFolder() string {
 	s += strconv.Itoa(os.Getuid()) + "/"
 	os.RemoveAll(s)
 	os.Mkdir(s, 0777)
+
+	// register Operation struct to rpc
+	gob.Register(Operation{})
+	gob.Register(PutAppendArgs{})
+	gob.Register(PutAppendReply{})
+	gob.Register(GetArgs{})
+	gob.Register(GetReply{})
+
 	return s
 }
 
