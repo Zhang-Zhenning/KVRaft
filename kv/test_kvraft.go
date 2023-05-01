@@ -47,6 +47,8 @@ func main() {
 	// client1 put some data into the KV fleet
 	client1.ClientPutAppend("a", "1", "Put")
 	client1.ClientPutAppend("b", "2", "Put")
+	client2.ClientGet("a")
+	time.Sleep(1 * time.Second)
 	client1.ClientPutAppend("c", "3", "Put")
 	client1.ClientPutAppend("d", "4", "Put")
 	client1.ClientPutAppend("e", "5", "Put")
@@ -54,7 +56,6 @@ func main() {
 	client1.ClientPutAppend("g", "7", "Put")
 
 	time.Sleep(1 * time.Second)
-
 	// client2 get some data from the KV fleet
 	client2.ClientGet("a")
 	time.Sleep(1 * time.Second)
@@ -69,6 +70,7 @@ func main() {
 	client2.ClientGet("f")
 	time.Sleep(1 * time.Second)
 	client2.ClientGet("g")
+	time.Sleep(1 * time.Second)
 
 	// shutdown raft fleet
 	raft.ShutdownRaft(rafts)
