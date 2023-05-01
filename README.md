@@ -1,2 +1,4 @@
-# Raft-Framework
-A self-designed Raft framework in Go
+# KVRaft
+A self-designed Raft-based distributed Key-Value storage system
+
+The whole project is written in Golang.
