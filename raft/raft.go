@@ -58,7 +58,6 @@ type GetReply struct {
 }
 
 // ---------------------------------------RAFT---------------------------------------------
-
 // apply structure
 type ApplyMsg struct {
 	CommandValid bool
