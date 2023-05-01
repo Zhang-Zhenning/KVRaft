@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"raft"
 	"time"
 )
@@ -73,7 +74,7 @@ func (kv *KVNode) DoOperation(client int64, msgIdx int64, req interface{}) (bool
 	}
 
 	// initialize the operation
-	curOp := Operation{
+	curOp := raft.Operation{
 		Req: req,
 		Ch:  make(chan interface{}, 1),
 	}
@@ -107,7 +108,7 @@ func (kv *KVNode) ApplyOperation(applyMsg raft.ApplyMsg) {
 	// update the apply index
 	kv.AppliedLogIndex = applyMsg.CommandIndex
 	// get the operation (type conversion)
-	curOp := applyMsg.Command.(Operation)
+	curOp := applyMsg.Command.(raft.Operation)
 	// response to curOp.Ch
 	var response interface{}
 
@@ -130,4 +131,40 @@ func (kv *KVNode) ApplyOperation(applyMsg raft.ApplyMsg) {
 	case curOp.Ch <- response:
 	default:
 	}
+}
+
+// kv loops
+func (kv *KVNode) StartLoop() {
+	for {
+		select {
+		case <-kv.KillChan:
+			break
+		case msg := <-kv.RaftApplyChan:
+			kv.ApplyOperation(msg)
+		}
+	}
+}
+
+// create server
+// should have a raft fleet online in advance
+func CreateKVNode(raftnode *raft.Raft, KVNodeName string, KVNodeId int, RaftApply chan raft.ApplyMsg) *KVNode {
+	kv := new(KVNode)
+	kv.me = KVNodeId
+	kv.me_name = KVNodeName
+	kv.RaftApplyChan = RaftApply
+	kv.RaftNode = raftnode
+	kv.KeyValueStorage = make(map[string]string)
+	kv.OperationRecord = make(map[int64]int64)
+	kv.KillChan = make(chan bool, 1)
+	kv.AppliedLogIndex = 0
+
+	// start main loop
+	go kv.StartLoop()
+	return kv
+}
+
+// stop kvnode, raft node should be stopped in advance
+func (kv *KVNode) StopKVNode() {
+	kv.KillChan <- true
+	fmt.Printf("KVNode %s: stopped\n", kv.me_name)
 }

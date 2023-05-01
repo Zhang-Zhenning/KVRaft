@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-type Clerk struct {
+type KVClient struct {
 	servers []*KVNode
 	me      int64
 	msgId   int64
@@ -21,8 +21,8 @@ func GenerateClerkId() int64 {
 	return x
 }
 
-func CreateClerk(servers []*KVNode) *Clerk {
-	ck := new(Clerk)
+func CreateClient(servers []*KVNode) *KVClient {
+	ck := new(KVClient)
 	ck.servers = servers
 	ck.me = GenerateClerkId()
 	ck.msgId = 0
@@ -31,7 +31,7 @@ func CreateClerk(servers []*KVNode) *Clerk {
 
 // client get interface
 // if timeout, return "nil"
-func (ck *Clerk) Get(key string) string {
+func (ck *KVClient) ClientGet(key string) string {
 	req := GetArgs{
 		Key: key,
 	}
@@ -40,18 +40,19 @@ func (ck *Clerk) Get(key string) string {
 		resp := GetReply{}
 		ck.servers[i%len(ck.servers)].Get(&req, &resp)
 		if resp.Success {
+			fmt.Printf("Client %d: ClientGet %s--%s\n", ck.me, key, resp.Value)
 			return resp.Value
 		}
 		time.Sleep(time.Millisecond * 5)
 	}
 
-	fmt.Printf("Client %d: Get %s timeout\n", ck.me, key)
+	fmt.Printf("Client %d: ClientGet %s timeout\n", ck.me, key)
 	return "nil"
 
 }
 
 // client put/append interface
-func (ck *Clerk) PutAppend(key string, value string, op string) {
+func (ck *KVClient) ClientPutAppend(key string, value string, op string) {
 	req := PutAppendArgs{
 		Key:   key,
 		Value: value,
@@ -64,6 +65,7 @@ func (ck *Clerk) PutAppend(key string, value string, op string) {
 		resp := PutAppendReply{}
 		ck.servers[i%len(ck.servers)].PutAppend(&req, &resp)
 		if resp.Success {
+			fmt.Printf("Client %d: %s %s--%s\n", ck.me, op, key, value)
 			return
 		}
 		time.Sleep(time.Millisecond * 5)

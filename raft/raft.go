@@ -28,6 +28,13 @@ const ElectionWinning int = -1000
 
 const LeaderMaximumTime = time.Duration(HeartbeatInterval * 10)
 
+// operation struct for key-value system
+// will be served as command field in log struct
+type Operation struct {
+	Req interface{}
+	Ch  chan interface{} // finish channel, will only be valid for leader (in other nodes it will be nil as channel can't be transfered by rpc)
+}
+
 // apply structure
 type ApplyMsg struct {
 	CommandValid bool

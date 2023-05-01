@@ -7,13 +7,6 @@ import (
 
 type Err string
 
-// operation struct for key-value system
-// will be served as command field in log struct
-type Operation struct {
-	Req interface{}
-	Ch  chan interface{} // finish channel, will only be valid for leader (in other nodes it will be nil as channel can't be transfered by rpc)
-}
-
 // RaftKV node struct
 type KVNode struct {
 	mu              sync.Mutex
@@ -48,4 +41,10 @@ type GetReply struct {
 	Success bool
 	Err     Err
 	Value   string
+}
+
+func ShutdownKV(kvs []*KVNode) {
+	for _, kv := range kvs {
+		kv.StopKVNode()
+	}
 }
