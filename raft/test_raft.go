@@ -4,7 +4,7 @@ import (
 	"fmt"
 )
 
-func Test_raft() {
+func test_raft() {
 
 	// setup/cleanup the socket files
 	s := SetupUnixSocketFolder()

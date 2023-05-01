@@ -81,3 +81,7 @@ func test_kvraft() {
 	// shutdown KV fleet
 	ShutdownKV(KVservers)
 }
+
+func main() {
+	test_kvraft()
+}
