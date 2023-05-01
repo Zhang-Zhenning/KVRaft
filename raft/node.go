@@ -277,7 +277,7 @@ func SendCommandToLeader(server string, command interface{}) bool {
 			return false
 		}
 	case <-time.After(HeartbeatInterval * 7):
-		fmt.Printf("In SendCommandToLeader: send command %s to Node %s timeout\n", command, server)
+		fmt.Printf("In SendCommandToLeader: send command %s to RaftNode %s timeout\n", command, server)
 		return false
 	}
 
@@ -308,7 +308,7 @@ func (rf *Raft) HandleCommand(args *CommandArgs, reply *CommandReply) error {
 		// leader successfully applied the command
 		reply.Success = true
 	case <-time.After(HeartbeatInterval * 5):
-		fmt.Printf("In HandleCommand: Node %s timeout when handle command %s\n", rf.me_name, args.Command)
+		fmt.Printf("In HandleCommand: RaftNode %s timeout when handle command %s\n", rf.me_name, args.Command)
 		reply.Success = false
 	}
 
@@ -336,7 +336,7 @@ func (rf *Raft) HandleKVOperation(command interface{}) bool {
 		// leader successfully applied the command
 		return true
 	case <-time.After(HeartbeatInterval * 5):
-		fmt.Printf("In HandleCommand: Node %s timeout when handle command %s\n", rf.me_name, command)
+		fmt.Printf("In HandleCommand: RaftNode %s timeout when handle command %s\n", rf.me_name, command)
 		return false
 	}
 }
@@ -557,7 +557,7 @@ func (rf *Raft) Apply() {
 			}
 		}
 
-		fmt.Printf("Node %s pushed logs from index %d (term %d) to index %d (term %d) into implementation channel\n", rf.peers[rf.me], lastapplied+1, p1, rf.LastApplied, p2)
+		fmt.Printf("RaftNode %s pushed logs from index %d (term %d) to index %d (term %d) into implementation channel\n", rf.peers[rf.me], lastapplied+1, p1, rf.LastApplied, p2)
 	}
 }
 
@@ -640,7 +640,7 @@ func (rf *Raft) Election() {
 		rf.ResetElectionTimer()
 		return
 	} else if numGranted*2 > len(rf.peers) {
-		fmt.Printf("Node %s win the election in term %d\n", rf.peers[rf.me], rf.Term)
+		fmt.Printf("RaftNode %s win the election in term %d\n", rf.peers[rf.me], rf.Term)
 		rf.SetStatus(Leader)
 		rf.ResetElectionTimer()
 		rf.SendElectionWinning()
@@ -909,19 +909,19 @@ func (rf *Raft) StartServer(serverWg *sync.WaitGroup) {
 	err := rpcs.Register(rf)
 	//os.Remove(rf.me_name)
 	if err != nil {
-		fmt.Printf("Node %s: Error in registering rpc: %s\n", rf.me_name, err)
+		fmt.Printf("RaftNode %s: Error in registering rpc: %s\n", rf.me_name, err)
 		return
 	}
 
 	// listen to incoming rpc calls
 	lis, er := net.Listen("unix", rf.me_name)
 	if er != nil {
-		fmt.Printf("Node %s: Error in listening: %s\n", rf.me_name, er)
+		fmt.Printf("RaftNode %s: Error in listening: %s\n", rf.me_name, er)
 		return
 	}
 
 	rf.listener = lis
-	fmt.Printf("Node %s: start server\n", rf.me_name)
+	fmt.Printf("RaftNode %s: start server\n", rf.me_name)
 
 	// announce the server is ready
 	serverWg.Done()
@@ -936,7 +936,7 @@ func (rf *Raft) StartServer(serverWg *sync.WaitGroup) {
 
 		conc, er := rf.listener.Accept()
 		if er != nil {
-			//fmt.Printf("Node %s: Error in accepting: %s\n", rf.me_name, er)
+			//fmt.Printf("RaftNode %s: Error in accepting: %s\n", rf.me_name, er)
 			break
 		} else {
 			go func() {
@@ -946,6 +946,6 @@ func (rf *Raft) StartServer(serverWg *sync.WaitGroup) {
 		}
 
 	}
-	fmt.Printf("Node %s: shutdown server\n", rf.me_name)
+	fmt.Printf("RaftNode %s: shutdown server\n", rf.me_name)
 
 }

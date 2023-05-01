@@ -162,7 +162,7 @@ func HandleMsg(chans []chan ApplyMsg, raftnodes []string) {
 		go func(i int) {
 			for {
 				msg := <-chans[i]
-				fmt.Printf("Node %s: implemented command %s\n", raftnodes[i], msg.Command)
+				fmt.Printf("RaftNode %s: implemented command %s\n", raftnodes[i], msg.Command)
 			}
 		}(i)
 
