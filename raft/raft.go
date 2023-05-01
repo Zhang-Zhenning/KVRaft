@@ -29,6 +29,8 @@ const ElectionWinning int = -1000
 const LeaderMaximumTime = time.Duration(HeartbeatInterval * 10)
 
 // ---------------------------------------KVnode---------------------------------------------
+// kvnode structs (define here rather than kvraft.go to avoid circular dependency)
+
 // operation struct for key-value system
 // will be served as command field in log struct
 type Operation struct {
@@ -58,6 +60,8 @@ type GetReply struct {
 }
 
 // ---------------------------------------RAFT---------------------------------------------
+// raft structs (define here rather than raft.go to avoid circular dependency)
+
 // apply structure
 type ApplyMsg struct {
 	CommandValid bool

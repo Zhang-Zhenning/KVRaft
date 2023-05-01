@@ -22,17 +22,10 @@ func GenerateOpId() int64 {
 	return x
 }
 
-func GenerateClerkId() int64 {
-	max := big.NewInt(int64(1) << 62)
-	bigx, _ := rand.Int(rand.Reader, max)
-	x := bigx.Int64()
-	return x
-}
-
 func CreateClient(servers []*KVNode) *KVClient {
 	ck := new(KVClient)
 	ck.servers = servers
-	ck.me = GenerateClerkId()
+	ck.me = GenerateClientId()
 	ck.msgId = 0
 	return ck
 }
@@ -44,7 +37,7 @@ func (ck *KVClient) ClientGet(key string) string {
 		Key: key,
 	}
 
-	for i := 0; i < 8000; i++ {
+	for i := 0; i < 5000; i++ {
 		resp := raft.GetReply{}
 		ck.servers[i%len(ck.servers)].Get(&req, &resp)
 		if resp.Success {
@@ -69,7 +62,7 @@ func (ck *KVClient) ClientPutAppend(key string, value string, op string) {
 		MsgId: atomic.AddInt64(&ck.msgId, 1),
 	}
 
-	for i := 0; i < 8000; i++ {
+	for i := 0; i < 5000; i++ {
 		resp := raft.PutAppendReply{}
 		ck.servers[i%len(ck.servers)].PutAppend(&req, &resp)
 		if resp.Success {
@@ -80,4 +73,11 @@ func (ck *KVClient) ClientPutAppend(key string, value string, op string) {
 	}
 
 	fmt.Printf("Client %d: %s %s--%s timeout\n", op, ck.me, key, value)
+}
+
+func GenerateClientId() int64 {
+	max := big.NewInt(int64(1) << 62)
+	bigx, _ := rand.Int(rand.Reader, max)
+	x := bigx.Int64()
+	return x
 }
