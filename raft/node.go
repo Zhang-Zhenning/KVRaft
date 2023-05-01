@@ -1,4 +1,4 @@
-package main
+package raft
 
 import (
 	"fmt"
@@ -13,7 +13,7 @@ import (
 
 // print debug info
 func (rf *Raft) DebugPrint(args ...interface{}) {
-	if enableDebug {
+	if EnableDebug {
 		log.Println(args...)
 	}
 }
@@ -211,7 +211,7 @@ func (rf *Raft) UpdateCommitIndex() bool {
 // which means if the current request's max index (previndex + snapshot.index + len(entries))
 // is equal to the last request, we need to accept it
 // then the vote counter will be reset (avoid the followers starting a new election)
-func (rf *Raft) isOldRequest(req *AppendEntriesArgs) bool {
+func (rf *Raft) IsOldRequest(req *AppendEntriesArgs) bool {
 
 	if req.Term == rf.LastReqFromLeader.Term && req.LeaderId == rf.LastReqFromLeader.LeaderId {
 		lastIndex := rf.LastReqFromLeader.PrevLogIndex + rf.LastReqFromLeader.Snapshot.Index + len(rf.LastReqFromLeader.Entries)
@@ -236,9 +236,9 @@ func (rf *Raft) SyncLogNow() {
 func (rf *Raft) SendVoteRequest(server int, args *RequestVoteArgs, repl *RequestVoteReply) error {
 	finishChan := make(chan bool)
 
-	// use a new thread to invoke rpc call
+	// use a new thread to invoke rpc Call
 	go func() {
-		rpcret := call(rf.peers[server], "Raft.HandleRequestVote", args, repl)
+		rpcret := Call(rf.peers[server], "Raft.HandleRequestVote", args, repl)
 		finishChan <- rpcret
 	}()
 
@@ -261,9 +261,9 @@ func SendCommandToLeader(server string, command interface{}) bool {
 	// construct the reply
 	reply := &CommandReply{IsLeader: false, Success: false}
 
-	// use a new thread to invoke rpc call
+	// use a new thread to invoke rpc Call
 	go func() {
-		rpcret := call(server, "Raft.HandleCommand", args, reply)
+		rpcret := Call(server, "Raft.HandleCommand", args, reply)
 		finishChan <- rpcret
 	}()
 
@@ -313,6 +313,32 @@ func (rf *Raft) HandleCommand(args *CommandArgs, reply *CommandReply) error {
 	}
 
 	return nil
+}
+
+// handle the KV operations from the client
+func (rf *Raft) HandleKVOperation(command interface{}) bool {
+	rf.mu.Lock()
+	_, isl := rf.GetTerm()
+
+	if isl == false {
+		// not leader, return
+		rf.mu.Unlock()
+		return false
+	}
+
+	cdChan := make(chan bool)
+	rf.ImplementCommand(command, cdChan)
+	rf.mu.Unlock()
+
+	// wait for the command to be committed if it is leader
+	select {
+	case <-cdChan:
+		// leader successfully applied the command
+		return true
+	case <-time.After(HeartbeatInterval * 5):
+		fmt.Printf("In HandleCommand: Node %s timeout when handle command %s\n", rf.me_name, command)
+		return false
+	}
 }
 
 // handle the request vote from other peers
@@ -365,9 +391,9 @@ func (rf *Raft) HandleRequestVote(args *RequestVoteArgs, reply *RequestVoteReply
 func (rf *Raft) SendAppendEntryRequest(server int, args *AppendEntriesArgs, repl *AppendEntriesReply) error {
 	finishChan := make(chan bool)
 
-	// use a new thread to invoke rpc call
+	// use a new thread to invoke rpc Call
 	go func() {
-		rpcret := call(rf.peers[server], "Raft.HandleAppendEntry", args, repl)
+		rpcret := Call(rf.peers[server], "Raft.HandleAppendEntry", args, repl)
 		finishChan <- rpcret
 	}()
 
@@ -379,7 +405,7 @@ func (rf *Raft) SendAppendEntryRequest(server int, args *AppendEntriesArgs, repl
 	return nil
 }
 
-// handle request append entry rpc call
+// handle request append entry rpc Call
 func (rf *Raft) HandleAppendEntry(args *AppendEntriesArgs, repl *AppendEntriesReply) error {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
@@ -397,7 +423,7 @@ func (rf *Raft) HandleAppendEntry(args *AppendEntriesArgs, repl *AppendEntriesRe
 
 	// if the args is the old one
 	// refuse sync the log
-	if rf.isOldRequest(args) {
+	if rf.IsOldRequest(args) {
 		repl.Success = false
 		return nil
 	}
@@ -582,7 +608,7 @@ func (rf *Raft) Election() {
 	numGranted := 0
 	term := electTerm
 
-	// start sending request vote rpc call to other peers
+	// start sending request vote rpc Call to other peers
 	for i := 0; i < len(rf.peers); i++ {
 		go func(server int) {
 			defer waitPeerFinish.Done()
@@ -605,7 +631,7 @@ func (rf *Raft) Election() {
 		}(i)
 	}
 
-	// wait until all the rpc call finish
+	// wait until all the rpc Call finish
 	waitPeerFinish.Wait()
 
 	if term > electTerm {
@@ -682,13 +708,13 @@ func (rf *Raft) SyncLog(server int) (sync_success bool) {
 		rep := AppendEntriesReply{Term: 0}
 		//rf.mu.Unlock()
 
-		// send rpc call to peer
+		// send rpc Call to peer
 		rpcRet := rf.SendAppendEntryRequest(server, &arg, &rep)
 
 		//rf.mu.Lock()
 		//curTerm, isLeader = rf.GetTerm()
 
-		// if rpc call failed, retry
+		// if rpc Call failed, retry
 		if (rpcRet == nil) && isLeader {
 			// if the peer has larger term, convert to follower
 			if rep.Term > curTerm {
@@ -772,9 +798,9 @@ func (rf *Raft) ImplementCommand(command interface{}, donec chan bool) (index in
 func SendKillRequest(server string) error {
 	finishChan := make(chan bool)
 
-	// use a new thread to invoke rpc call
+	// use a new thread to invoke rpc Call
 	go func() {
-		rpcret := call(server, "Raft.HandleKillRequest", new(struct{}), new(struct{}))
+		rpcret := Call(server, "Raft.HandleKillRequest", new(struct{}), new(struct{}))
 		finishChan <- rpcret
 	}()
 
@@ -805,7 +831,7 @@ func (rf *Raft) HandleKillRequest(_ *struct{}, _ *struct{}) error {
 }
 
 // shutdown election loop and sync log loop
-// the best way to shutdown a Raft fleet is to firstly call shutdownloops for each node, then call shutdownserver for each node
+// the best way to shutdown a Raft fleet is to firstly Call shutdownloops for each node, then Call shutdownserver for each node
 func (rf *Raft) ShutdownLoops() {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()

@@ -1,4 +1,4 @@
-package main
+package raft
 
 import (
 	"fmt"
@@ -20,11 +20,12 @@ const HeartbeatInterval = time.Duration(time.Millisecond * 600)
 // there would be endless of elections, increasing the overhead
 const VoteInterval = HeartbeatInterval * 2
 
-const enableDebug bool = false
+const EnableDebug bool = false
 
-const RPCServerPath string = "."
+const RPCServerPath string = "./raft"
 
 const ElectionWinning int = -1000
+
 const LeaderMaximumTime = time.Duration(HeartbeatInterval * 10)
 
 // apply structure
@@ -125,7 +126,7 @@ type Raft struct {
 }
 
 // apply msg from the msg channels
-func handleMsg(chans []chan ApplyMsg, raftnodes []string) {
+func HandleMsg(chans []chan ApplyMsg, raftnodes []string) {
 
 	for i := 0; i < len(chans); i++ {
 		go func(i int) {
@@ -174,7 +175,7 @@ func Write(raftnodes []string, cmd string) {
 }
 
 // write a series of commands into Raft fleet
-func writeCommands(raftnodes []string, cmds []string) {
+func WriteCommands(raftnodes []string, cmds []string) {
 	for i := 0; i < len(cmds); i++ {
 		time.Sleep(50 * time.Millisecond)
 		Write(raftnodes, cmds[i])
@@ -184,7 +185,7 @@ func writeCommands(raftnodes []string, cmds []string) {
 }
 
 // start the whole Raft fleet
-func startRaft(raftnodes []*Raft, nodenames []string, applycs []chan ApplyMsg) {
+func StartRaft(raftnodes []*Raft, nodenames []string, applycs []chan ApplyMsg) {
 	var wg_server sync.WaitGroup
 	var wg_deploy sync.WaitGroup
 	wg_server.Add(len(raftnodes))
@@ -199,7 +200,7 @@ func startRaft(raftnodes []*Raft, nodenames []string, applycs []chan ApplyMsg) {
 	wg_server.Wait()
 
 	// handle all msg
-	handleMsg(applycs, nodenames)
+	HandleMsg(applycs, nodenames)
 
 	// wait for handle msg goroutines to start
 	time.Sleep(100 * time.Millisecond)
@@ -216,7 +217,7 @@ func startRaft(raftnodes []*Raft, nodenames []string, applycs []chan ApplyMsg) {
 }
 
 // shutdown the whole Raft fleet
-func shutdownRaft(raftnodes []*Raft) {
+func ShutdownRaft(raftnodes []*Raft) {
 	var wg sync.WaitGroup
 	wg.Add(len(raftnodes))
 

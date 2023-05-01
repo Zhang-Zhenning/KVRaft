@@ -1,4 +1,4 @@
-package main
+package raft
 
 import (
 	"log"
@@ -24,7 +24,7 @@ func CleanupUnixSocketFolder(ss string) {
 // Cook up a unique-ish UNIX-domain socket Worker_name
 // in /var/tmp. can't use current directory since
 // AFS doesn't support UNIX-domain sockets.
-func get_socket_name(suffix string) string {
+func Get_socket_name(suffix string) string {
 	s := RPCServerPath + "/uid-"
 	s += strconv.Itoa(os.Getuid()) + "/"
 	s += "mr"
@@ -33,8 +33,8 @@ func get_socket_name(suffix string) string {
 	return s
 }
 
-// rpc call function
-func call(srv_name string, func_name string, args interface{}, reply interface{}) bool {
+// rpc Call function
+func Call(srv_name string, func_name string, args interface{}, reply interface{}) bool {
 	c, errx := rpc.Dial("unix", srv_name)
 	if errx != nil {
 		log.Fatal("dialing:", errx)
@@ -44,7 +44,7 @@ func call(srv_name string, func_name string, args interface{}, reply interface{}
 
 	err := c.Call(func_name, args, reply)
 	if err != nil {
-		log.Fatal("call:", err)
+		log.Fatal("Call:", err)
 		return false
 	}
 
